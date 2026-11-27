@@ -42,6 +42,19 @@
   h1 { font-size:18px; margin:0 0 12px; }
   h1.brand { display:flex; align-items:center; gap:10px; } /* site icon to the left of the title */
   h1.brand img { width:32px; height:32px; border-radius:7px; flex:0 0 32px; }
+  /* About: a small button beside the title, and a short window */
+  h1.brand #aboutbtn { margin:0 0 0 auto; width:auto; padding:3px 10px; font-size:12px; font-weight:600; background:transparent; color:var(--acc); border:1px solid var(--line); border-radius:12px; }
+  h1.brand #aboutbtn:hover { border-color:var(--acc); }
+  #about { max-width:min(460px, calc(100vw - 32px)); background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:20px 22px 16px; box-shadow:0 10px 40px rgba(0,0,0,.55); font-size:13px; line-height:1.55; }
+  #about::backdrop { background:rgba(0,0,0,.6); }
+  #about h2 { margin:0 0 8px; font-size:17px; display:flex; align-items:center; gap:8px; }
+  #about h2 img { width:26px; height:26px; border-radius:6px; }
+  #about p { margin:0 0 10px; }
+  #about ul { margin:0 0 10px; padding-left:18px; }
+  #about li { margin:2px 0; }
+  #about .small { font-size:11.5px; color:var(--muted); }
+  #about form { text-align:right; margin:4px 0 0; }
+  #about form button { width:auto; margin:0; padding:6px 18px; }
   h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:18px 0 8px; }
   label { display:block; font-size:12px; color:var(--muted); margin:8px 0 3px; }
   input, select, button { width:100%; padding:8px; border-radius:6px; border:1px solid var(--line); background:var(--field); color:var(--text); font:inherit; }
@@ -214,7 +227,20 @@ try { if (JSON.parse(localStorage.getItem('stl.theme')) === 'light') document.do
 </head>
 <body>
 <aside>
-  <h1 class="brand"><img src="sat-image-bd-icon-192x192.png" alt="" width="32" height="32">SatLapseMap</h1>
+  <h1 class="brand"><img src="sat-image-bd-icon-192x192.png" alt="" width="32" height="32">SatLapseMap<button id="aboutbtn" type="button" title="What is SatLapseMap?">About</button></h1>
+  <dialog id="about" aria-labelledby="abouthd">
+    <h2 id="abouthd"><img src="sat-image-bd-icon-192x192.png" alt="">About SatLapseMap</h2>
+    <p>SatLapseMap is a free tool for seeing how places in Bangladesh have changed since 1989: shifting rivers, new chars, haors, polders and growing towns.</p>
+    <ul>
+      <li><b>Timelapses:</b> step through satellite imagery from Esri, Sentinel-2, Landsat and NASA MODIS, and save it as MP4, AVI or GIF.</li>
+      <li><b>Maps:</b> save high-resolution JPGs with border, lat/lon, scale bar, north arrow, legend and location map.</li>
+      <li><b>Water-sector layers:</b> BWDB structures, water-level stations, river training works, embankments, canals, haors, polders and rivers.</li>
+      <li><b>Your own marks:</b> add placemarks, paths and arrows; open and save KML/KMZ.</li>
+    </ul>
+    <p>It all runs in your browser: nothing to install, no sign-in.</p>
+    <p class="small">Made by Dr. Muhammad Masood. Layer data from BWDB and other sources; not all layers have been verified, so please use them with caution.</p>
+    <form method="dialog"><button>Close</button></form>
+  </dialog>
 
   <details class="panel" data-k="area" open><summary>1. Area</summary>
   <div class="row"><input id="q" list="hlist" placeholder="Search place (e.g. Jamuna river, Sirajganj)" autocomplete="off"><button id="go" class="sec" style="width:70px;flex:0 0 70px;margin:0">Go</button></div>
@@ -376,7 +402,7 @@ try { if (JSON.parse(localStorage.getItem('stl.theme')) === 'light') document.do
   <label class="chk" style="margin-top:10px"><input type="checkbox" id="dedup" checked> Skip repeated frames <span class="info" data-tip="Leaves out archive versions that show the same photo (same image or same capture date) as the frame before.">ⓘ</span></label>
   </details>
 
-  <div class="note"><span class="info" id="credits" data-tip="">ⓘ Data sources &amp; credits</span></div>
+  <div class="note"><span class="info" id="credits" data-tip="">ⓘ Data sources &amp; credits</span> · <a href="#about" id="aboutlink">About</a></div>
   <div class="footer">© Dr. Muhammad Masood<br><a href="mailto:masood35bd@yahoo.com">masood35bd@yahoo.com</a></div>
   <div class="note" id="lastupd" style="text-align:center;margin-top:8px">Last update: </div>
   <div style="text-align:center;margin-top:10px"><a href="https://info.flagcounter.com/qHju"><img src="https://s05.flagcounter.com/mini/qHju/bg_FFFFFF/txt_000000/border_CCCCCC/flags_0/" alt="Flag Counter" border="0"></a></div>
@@ -437,6 +463,10 @@ const ESRI_ATTR = 'Esri, Maxar, Earthstar Geographics';
 // fine zoom: + / − move a quarter level, the mouse wheel even less per notch
 const map = L.map('map', { maxZoom: 19, zoomSnap: 0.1, zoomDelta: 0.25, wheelPxPerZoomLevel: 240 }).setView([24.2, 89.7], 11);
 
+// ---- About window (button beside the title, link by the credits); a click outside it closes it
+const openAbout = e => { if (e) e.preventDefault(); $('about').showModal(); };
+$('aboutbtn').onclick = openAbout; $('aboutlink').onclick = openAbout;
+$('about').addEventListener('click', e => { if (e.target === $('about')) $('about').close(); }); // the backdrop
 // ---- hover pop-ups for anything with data-tip (help text, credits)
 const tipEl = document.createElement('div'); tipEl.id = 'tip'; document.body.appendChild(tipEl);
 const SRC_INFO = {
