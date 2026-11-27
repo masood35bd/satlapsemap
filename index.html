@@ -3151,16 +3151,16 @@ function openMapPreview(f) {
         h.innerHTML = `<span>${MP_NAMES[key]}</span>`;
         Object.assign(h.style, { left: b[0] * k + 'px', top: b[1] * k + 'px', width: b[2] * k + 'px', height: b[3] * k + 'px' });
         h.addEventListener('pointerdown', e => {
-          e.preventDefault(); h.setPointerCapture(e.pointerId); h.classList.add('drag');
+          e.preventDefault(); h.classList.add('drag');
           const sx = e.clientX, sy = e.clientY, l0 = b[0] * k, t0 = b[1] * k, maxL = cv.clientWidth - b[2] * k, maxT = cv.clientHeight - b[3] * k;
           let l = l0, t = t0;
           const mv = ev => { l = Math.max(0, Math.min(maxL, l0 + ev.clientX - sx)); t = Math.max(0, Math.min(maxT, t0 + ev.clientY - sy)); h.style.left = l + 'px'; h.style.top = t + 'px'; };
           const up = () => {
-            h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.classList.remove('drag');
+            document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); h.classList.remove('drag');
             if (Math.abs(l - l0) + Math.abs(t - t0) < 2) return; // just a click
             frameLay.pos[key] = [l / k / c.width, t / k / c.height]; saveLay(); render();
           };
-          h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up);
+          document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
         });
         h.addEventListener('dblclick', () => { delete frameLay.pos[key]; saveLay(); render(); });
         wrap.appendChild(h);
