@@ -463,7 +463,15 @@ function recall(k, d) {
 // ---- optional Google sign-in (Firebase): keeps placemarks and settings on every device, and names the user in the save log.
 // Paste the web-app config from Firebase console > Project settings > Your apps between the braces (see sign-in-setup.md).
 // Left as null, the Sign in button stays hidden and the page works exactly as before.
-const FIREBASE_CONFIG = null;
+const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyADrNGMaxsv85eukvuc63KOgi1ZCbXyKz4',
+  authDomain: 'satlapsemap.firebaseapp.com',
+  projectId: 'satlapsemap',
+  storageBucket: 'satlapsemap.firebasestorage.app',
+  databaseURL: 'https://satlapsemap-default-rtdb.asia-southeast1.firebasedatabase.app',
+  messagingSenderId: '709241717901',
+  appId: '1:709241717901:web:0f17197400b4e46c3f0ec4'
+};
 const FB_VER = '10.12.2';
 const NO_SYNC = ['visitorId', 'marksBig', 'cloudSync', 'cloudOn']; // per-browser keys that never leave this browser
 var cloud = { fb: null, user: null, ready: false, timer: 0 };
@@ -508,7 +516,7 @@ const openAbout = e => { if (e) e.preventDefault(); $('about').showModal(); };
 $('aboutbtn').onclick = openAbout; $('aboutlink').onclick = openAbout;
 $('about').addEventListener('click', e => { if (e.target === $('about')) $('about').close(); }); // the backdrop
 
-// ---- optional sign-in: the account window, and syncing this browser's settings (stl.* keys) with Firestore users/{uid}
+// ---- optional sign-in: the account window, and syncing this browser's settings (stl.* keys) with the Realtime Database at users/{uid}
 function cloudStatus(t) { $('acctstat').textContent = t || ''; }
 function cloudShow() { // fill the button and window for signed in / signed out
   const u = cloud.user;
@@ -522,9 +530,9 @@ function cloudShow() { // fill the button and window for signed in / signed out
 async function cloudLoad() { // Firebase is fetched only for people who use sign-in
   if (cloud.fb) return cloud.fb;
   const base = `https://www.gstatic.com/firebasejs/${FB_VER}/firebase-`;
-  const [app, A, fs] = await Promise.all(['app', 'auth', 'firestore'].map(m => import(base + m + '.js')));
+  const [app, A, fs] = await Promise.all(['app', 'auth', 'database'].map(m => import(base + m + '.js')));
   const a = app.initializeApp(FIREBASE_CONFIG);
-  cloud.fb = { A, fs, auth: A.getAuth(a), db: fs.getFirestore(a) };
+  cloud.fb = { A, fs, auth: A.getAuth(a), db: fs.getDatabase(a) };
   A.onAuthStateChanged(cloud.fb.auth, u => {
     if (u) cloudStart(u).catch(e => cloudStatus('Sync failed: ' + e.message));
     else { cloud.user = null; cloud.ready = false; store('cloudOn', false); cloudShow(); }
@@ -542,13 +550,16 @@ function cloudKV() { // every setting this browser keeps, as JSON text
   if (recall('marksBig', false)) kv.marks = JSON.stringify(marks); // big sets live in IndexedDB, not localStorage
   return kv;
 }
+// database keys can't hold . $ # [ ] /, so those are written as %XX
+const kvOut = kv => Object.fromEntries(Object.entries(kv).map(([k, v]) => [k.replace(/[%.$#[\]\/]/g, c => '%' + c.charCodeAt(0).toString(16)), v]));
+const kvIn = kv => Object.fromEntries(Object.entries(kv).map(([k, v]) => [decodeURIComponent(k), v]));
 async function cloudPush() {
   if (!cloud.ready) return;
   const { fs, db } = cloud.fb, u = cloud.user, kv = cloudKV(), at = Date.now();
-  const big = JSON.stringify(kv).length > 900000; // a Firestore document holds at most 1 MB
+  const big = JSON.stringify(kv).length > 900000; // keep each person's record under about 1 MB
   if (big) { delete kv.marks; delete kv.markFolders; }
   try {
-    await fs.setDoc(fs.doc(db, 'users', u.uid), { kv, at, name: u.displayName || '', email: u.email || '', lastSeen: fs.serverTimestamp() });
+    await fs.set(fs.ref(db, 'users/' + u.uid), { kv: kvOut(kv), at, name: u.displayName || '', email: u.email || '', lastSeen: fs.serverTimestamp() });
     store('cloudSync', { uid: u.uid, at });
     cloudStatus(big ? 'Settings synced. Your placemarks are too large to sync: save them as a KMZ instead.' : 'Synced at ' + new Date(at).toLocaleTimeString() + '.');
   } catch (e) { cloudStatus('Sync failed: ' + e.message); }
@@ -575,7 +586,8 @@ async function cloudApply(kv, merge) { // write the account's settings into this
 async function cloudStart(u) {
   cloud.user = u; store('cloudOn', true); cloudShow(); cloudStatus('Syncing…');
   const { fs, db } = cloud.fb, ss = recall('cloudSync', null);
-  const snap = await fs.getDoc(fs.doc(db, 'users', u.uid)), d = snap.exists() ? snap.data() : null;
+  const snap = await fs.get(fs.ref(db, 'users/' + u.uid)), d = snap.exists() ? snap.val() : null;
+  if (d && d.kv) d.kv = kvIn(d.kv);
   if (d && d.kv && (!ss || ss.uid !== u.uid)) { // first sign-in in this browser: combine both sets of placemarks
     await cloudApply(d.kv, true); store('cloudSync', { uid: u.uid, at: d.at });
     cloud.ready = true; await cloudPush(); location.reload(); return;
