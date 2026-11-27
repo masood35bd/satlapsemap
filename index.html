@@ -55,6 +55,17 @@
   #about .small { font-size:11.5px; color:var(--muted); }
   #about form { text-align:right; margin:4px 0 0; }
   #about form button { width:auto; margin:0; padding:6px 18px; }
+  /* optional Google sign-in: a button beside About, and a small account window */
+  h1.brand #signbtn { margin:0; width:auto; max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:3px 10px; font-size:12px; font-weight:600; background:transparent; color:var(--acc); border:1px solid var(--line); border-radius:12px; }
+  h1.brand #signbtn:hover { border-color:var(--acc); }
+  #acct { max-width:min(400px, calc(100vw - 32px)); background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:20px 22px 16px; box-shadow:0 10px 40px rgba(0,0,0,.55); font-size:13px; line-height:1.55; }
+  #acct::backdrop { background:rgba(0,0,0,.6); }
+  #acct h2 { margin:0 0 8px; font-size:17px; text-transform:none; letter-spacing:0; color:var(--text); display:flex; align-items:center; gap:10px; }
+  #acct h2 img { width:30px; height:30px; border-radius:50%; }
+  #acct p { margin:0 0 10px; }
+  #acct .small { font-size:11.5px; color:var(--muted); }
+  #acct .btns { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; margin-top:6px; }
+  #acct .btns button { width:auto; margin:0; padding:6px 14px; }
   h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:18px 0 8px; }
   label { display:block; font-size:12px; color:var(--muted); margin:8px 0 3px; }
   input, select, button { width:100%; padding:8px; border-radius:6px; border:1px solid var(--line); background:var(--field); color:var(--text); font:inherit; }
@@ -227,7 +238,25 @@ try { if (JSON.parse(localStorage.getItem('stl.theme')) === 'light') document.do
 </head>
 <body>
 <aside>
-  <h1 class="brand"><img src="sat-image-bd-icon-192x192.png" alt="" width="32" height="32">SatLapseMap<button id="aboutbtn" type="button" title="What is SatLapseMap?">About</button></h1>
+  <h1 class="brand"><img src="sat-image-bd-icon-192x192.png" alt="" width="32" height="32">SatLapseMap<button id="aboutbtn" type="button" title="What is SatLapseMap?">About</button><button id="signbtn" type="button" title="Optional: sign in with Google to keep your placemarks and settings on every device" hidden>Sign in</button></h1>
+  <dialog id="acct" aria-labelledby="accthd">
+    <h2 id="accthd"><img id="acctpic" alt="" hidden><span id="acctname">Sign in (optional)</span></h2>
+    <div id="acctout">
+      <p>Everything works without an account. Sign in with Google to keep your placemarks, paths, layer choices and map layout on every computer and phone you use.</p>
+      <p class="small">Your name and email are stored with your data, and with the anonymous save log, so the site's author can see who uses SatLapseMap. Sign out at any time; this browser keeps its own copy.</p>
+    </div>
+    <div id="acctin" hidden>
+      <p id="acctmail" class="small"></p>
+      <p>Your placemarks and settings are kept in your account and follow you to any device where you sign in.</p>
+    </div>
+    <p id="acctstat" class="small"></p>
+    <div class="btns">
+      <button id="acctgo" type="button">Sign in with Google</button>
+      <button id="acctsync" type="button" class="sec" hidden>Sync now</button>
+      <button id="acctoff" type="button" class="sec" hidden>Sign out</button>
+      <button id="acctclose" type="button" class="sec">Close</button>
+    </div>
+  </dialog>
   <dialog id="about" aria-labelledby="abouthd">
     <h2 id="abouthd"><img src="sat-image-bd-icon-192x192.png" alt="">About SatLapseMap</h2>
     <p>SatLapseMap is a free tool for seeing how places in Bangladesh have changed since 1989: shifting rivers, new chars, haors, polders and growing towns.</p>
@@ -237,7 +266,7 @@ try { if (JSON.parse(localStorage.getItem('stl.theme')) === 'light') document.do
       <li><b>Water-sector layers:</b> BWDB structures, water-level stations, river training works, embankments, canals, haors, polders and rivers.</li>
       <li><b>Your own marks:</b> add placemarks, paths and arrows; open and save KML/KMZ.</li>
     </ul>
-    <p>It all runs in your browser: nothing to install, no sign-in.</p>
+    <p>It all runs in your browser: nothing to install, and no account needed. Signing in with Google is optional and keeps your placemarks and settings on every device.</p>
     <p class="small">Made by Dr. Muhammad Masood. Layer data from BWDB and other sources. However, not all layers have been verified, so please use them with caution.</p>
     <form method="dialog"><button>Close</button></form>
   </dialog>
@@ -426,10 +455,21 @@ try { if (JSON.parse(localStorage.getItem('stl.theme')) === 'light') document.do
 const $ = id => document.getElementById(id);
 function setStatus(t) { $('status').textContent = t; }
 const memStore = {}; // fallback when the browser blocks localStorage
-function store(k, v) { memStore[k] = v; try { localStorage.setItem('stl.' + k, JSON.stringify(v)); } catch (e) {} }
+function store(k, v) { memStore[k] = v; try { localStorage.setItem('stl.' + k, JSON.stringify(v)); } catch (e) {} cloudQueue(k); }
 function recall(k, d) {
   try { const v = localStorage.getItem('stl.' + k); if (v != null) return JSON.parse(v); } catch (e) {}
   return k in memStore ? memStore[k] : d;
+}
+// ---- optional Google sign-in (Firebase): keeps placemarks and settings on every device, and names the user in the save log.
+// Paste the web-app config from Firebase console > Project settings > Your apps between the braces (see sign-in-setup.md).
+// Left as null, the Sign in button stays hidden and the page works exactly as before.
+const FIREBASE_CONFIG = null;
+const FB_VER = '10.12.2';
+const NO_SYNC = ['visitorId', 'marksBig', 'cloudSync', 'cloudOn']; // per-browser keys that never leave this browser
+var cloud = { fb: null, user: null, ready: false, timer: 0 };
+function cloudQueue(k) { // a setting changed: send everything to the account a moment later
+  if (!cloud.ready || NO_SYNC.includes(k)) return;
+  clearTimeout(cloud.timer); cloud.timer = setTimeout(cloudPush, 2500);
 }
 // ---- anonymous save counter (setup: see save-counter-setup.md)
 // Paste your Google Apps Script web-app link between the quotes. Leave empty to switch counting off.
@@ -440,7 +480,7 @@ function logSave(format, info = {}) {
   if (!STATS_URL || location.protocol === 'data:') return;
   try {
     const c = map.getCenter();
-    const data = Object.assign({ format, lat: +c.lat.toFixed(2), lng: +c.lng.toFixed(2), zoom: +map.getZoom().toFixed(1), visitor: visitorId }, info);
+    const data = Object.assign({ format, lat: +c.lat.toFixed(2), lng: +c.lng.toFixed(2), zoom: +map.getZoom().toFixed(1), visitor: visitorId, user: cloud.user ? cloud.user.email || '' : '' }, info);
     fetch(STATS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(data), keepalive: true }).catch(() => {});
   } catch (e) { /* counting must never break saving */ }
 }
@@ -467,6 +507,104 @@ const map = L.map('map', { maxZoom: 19, zoomSnap: 0.1, zoomDelta: 0.25, wheelPxP
 const openAbout = e => { if (e) e.preventDefault(); $('about').showModal(); };
 $('aboutbtn').onclick = openAbout; $('aboutlink').onclick = openAbout;
 $('about').addEventListener('click', e => { if (e.target === $('about')) $('about').close(); }); // the backdrop
+
+// ---- optional sign-in: the account window, and syncing this browser's settings (stl.* keys) with Firestore users/{uid}
+function cloudStatus(t) { $('acctstat').textContent = t || ''; }
+function cloudShow() { // fill the button and window for signed in / signed out
+  const u = cloud.user;
+  $('signbtn').textContent = u ? (u.displayName || u.email || 'Account').split(' ')[0] : 'Sign in';
+  $('acctname').textContent = u ? u.displayName || 'Signed in' : 'Sign in (optional)';
+  $('acctpic').hidden = !(u && u.photoURL); if (u && u.photoURL) $('acctpic').src = u.photoURL;
+  $('acctmail').textContent = u ? 'Signed in as ' + (u.email || '') : '';
+  $('acctout').hidden = !!u; $('acctin').hidden = !u;
+  $('acctgo').hidden = !!u; $('acctsync').hidden = $('acctoff').hidden = !u;
+}
+async function cloudLoad() { // Firebase is fetched only for people who use sign-in
+  if (cloud.fb) return cloud.fb;
+  const base = `https://www.gstatic.com/firebasejs/${FB_VER}/firebase-`;
+  const [app, A, fs] = await Promise.all(['app', 'auth', 'firestore'].map(m => import(base + m + '.js')));
+  const a = app.initializeApp(FIREBASE_CONFIG);
+  cloud.fb = { A, fs, auth: A.getAuth(a), db: fs.getFirestore(a) };
+  A.onAuthStateChanged(cloud.fb.auth, u => {
+    if (u) cloudStart(u).catch(e => cloudStatus('Sync failed: ' + e.message));
+    else { cloud.user = null; cloud.ready = false; store('cloudOn', false); cloudShow(); }
+  });
+  return cloud.fb;
+}
+function cloudKV() { // every setting this browser keeps, as JSON text
+  const kv = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k.startsWith('stl.') && !NO_SYNC.includes(k.slice(4))) kv[k.slice(4)] = localStorage.getItem(k);
+    }
+  } catch (e) { for (const k in memStore) if (!NO_SYNC.includes(k)) kv[k] = JSON.stringify(memStore[k]); }
+  if (recall('marksBig', false)) kv.marks = JSON.stringify(marks); // big sets live in IndexedDB, not localStorage
+  return kv;
+}
+async function cloudPush() {
+  if (!cloud.ready) return;
+  const { fs, db } = cloud.fb, u = cloud.user, kv = cloudKV(), at = Date.now();
+  const big = JSON.stringify(kv).length > 900000; // a Firestore document holds at most 1 MB
+  if (big) { delete kv.marks; delete kv.markFolders; }
+  try {
+    await fs.setDoc(fs.doc(db, 'users', u.uid), { kv, at, name: u.displayName || '', email: u.email || '', lastSeen: fs.serverTimestamp() });
+    store('cloudSync', { uid: u.uid, at });
+    cloudStatus(big ? 'Settings synced. Your placemarks are too large to sync: save them as a KMZ instead.' : 'Synced at ' + new Date(at).toLocaleTimeString() + '.');
+  } catch (e) { cloudStatus('Sync failed: ' + e.message); }
+}
+async function cloudApply(kv, merge) { // write the account's settings into this browser; merge keeps this browser's placemarks too
+  if (merge) {
+    const join = (a, b) => { const ids = new Set(a.map(x => x.id)); return a.concat(b.filter(x => !ids.has(x.id))); };
+    const local = recall('marksBig', false) ? await idbDo('readonly', s => s.get('marks')).catch(() => marks) || [] : marks;
+    kv.marks = JSON.stringify(join(kv.marks ? JSON.parse(kv.marks) : [], local));
+    kv.markFolders = JSON.stringify(join(kv.markFolders ? JSON.parse(kv.markFolders) : [], folders));
+  }
+  for (const k in kv) {
+    if (k === 'marks') continue;
+    try { localStorage.setItem('stl.' + k, kv[k]); } catch (e) {}
+  }
+  if (kv.marks) {
+    try { localStorage.setItem('stl.marks', kv.marks); localStorage.setItem('stl.marksBig', 'false'); }
+    catch (e) { // too big for localStorage: keep them in IndexedDB like a big import
+      await idbDo('readwrite', s => s.put(JSON.parse(kv.marks), 'marks'));
+      try { localStorage.removeItem('stl.marks'); localStorage.setItem('stl.marksBig', 'true'); } catch (e2) {}
+    }
+  }
+}
+async function cloudStart(u) {
+  cloud.user = u; store('cloudOn', true); cloudShow(); cloudStatus('Syncing…');
+  const { fs, db } = cloud.fb, ss = recall('cloudSync', null);
+  const snap = await fs.getDoc(fs.doc(db, 'users', u.uid)), d = snap.exists() ? snap.data() : null;
+  if (d && d.kv && (!ss || ss.uid !== u.uid)) { // first sign-in in this browser: combine both sets of placemarks
+    await cloudApply(d.kv, true); store('cloudSync', { uid: u.uid, at: d.at });
+    cloud.ready = true; await cloudPush(); location.reload(); return;
+  }
+  if (d && d.kv && d.at > ss.at) { // changed on another device since this browser last synced
+    await cloudApply(d.kv, false); store('cloudSync', { uid: u.uid, at: d.at }); location.reload(); return;
+  }
+  cloud.ready = true; await cloudPush();
+}
+async function cloudBoot() { // on load: show the button, and reconnect if this browser was signed in
+  if (!FIREBASE_CONFIG || location.protocol === 'file:' || location.protocol === 'data:') return;
+  $('signbtn').hidden = false; cloudShow();
+  if (recall('cloudOn', false)) cloudLoad().catch(() => {});
+}
+$('signbtn').onclick = () => { cloudShow(); $('acct').showModal(); if (!cloud.fb) cloudLoad().catch(e => cloudStatus('Could not reach Google sign-in: ' + e.message)); };
+$('acctclose').onclick = () => $('acct').close();
+$('acct').addEventListener('click', e => { if (e.target === $('acct')) $('acct').close(); });
+$('acctgo').onclick = async () => {
+  try {
+    const { A, auth } = await cloudLoad(); cloudStatus('Opening Google sign-in…');
+    await A.signInWithPopup(auth, new A.GoogleAuthProvider());
+  } catch (e) { cloudStatus(e.code === 'auth/popup-closed-by-user' ? '' : 'Sign-in failed: ' + e.message); }
+};
+$('acctsync').onclick = () => { cloudStatus('Syncing…'); cloudPush(); };
+$('acctoff').onclick = async () => {
+  clearTimeout(cloud.timer); if (cloud.ready) await cloudPush(); // keep the latest changes in the account
+  cloud.ready = false; store('cloudSync', null); // the next sign-in here combines placemarks again instead of replacing them
+  await cloud.fb.A.signOut(cloud.fb.auth); cloudStatus('Signed out. This browser keeps its own copy.');
+};
 // ---- hover pop-ups for anything with data-tip (help text, credits)
 const tipEl = document.createElement('div'); tipEl.id = 'tip'; document.body.appendChild(tipEl);
 const SRC_INFO = {
@@ -3793,6 +3931,7 @@ layoutBox();
 renderHist();
 setBasemap(recall('basemapV2', 'hyb'));
 if (anyOverlayOn()) refreshOverlays();
+cloudBoot();
 </script>
 </body>
 </html>
