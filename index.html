@@ -250,7 +250,6 @@ try { if (JSON.parse(localStorage.getItem('stl.theme')) === 'light') document.do
     <p id="acctstat" class="small"></p>
     <div class="btns">
       <button id="acctgo" type="button">Sign in with Google</button>
-      <button id="acctsync" type="button" class="sec" hidden>Sync now</button>
       <button id="acctoff" type="button" class="sec" hidden>Sign out</button>
       <button id="acctclose" type="button" class="sec">Close</button>
     </div>
@@ -523,7 +522,7 @@ function cloudShow() { // fill the button and window for signed in / signed out
   $('acctpic').hidden = !(u && u.photoURL); if (u && u.photoURL) $('acctpic').src = u.photoURL;
   $('acctmail').textContent = u ? 'Signed in as ' + (u.email || '') : '';
   $('acctout').hidden = !!u; $('acctin').hidden = !u;
-  $('acctgo').hidden = !!u; $('acctsync').hidden = $('acctoff').hidden = !u;
+  $('acctgo').hidden = !!u; $('acctoff').hidden = !u;
 }
 async function cloudLoad() { // Firebase is fetched only for people who use sign-in
   if (cloud.fb) return cloud.fb;
@@ -552,6 +551,7 @@ function cloudKV() { // every setting this browser keeps, as JSON text
 const kvOut = kv => Object.fromEntries(Object.entries(kv).map(([k, v]) => [k.replace(/[%.$#[\]\/]/g, c => '%' + c.charCodeAt(0).toString(16)), v]));
 const kvIn = kv => Object.fromEntries(Object.entries(kv).map(([k, v]) => [decodeURIComponent(k), v]));
 async function cloudPush() {
+  clearTimeout(cloud.timer); cloud.timer = 0;
   if (!cloud.ready) return;
   const { fs, db } = cloud.fb, u = cloud.user, kv = cloudKV(), at = Date.now();
   const big = JSON.stringify(kv).length > 900000; // keep each person's record under about 1 MB
@@ -607,9 +607,30 @@ $('acctgo').onclick = async () => {
   try {
     const { A, auth } = await cloudLoad(); cloudStatus('Opening Google sign-in…');
     await A.signInWithPopup(auth, new A.GoogleAuthProvider());
+    $('acct').close(); // signed in: no need to keep the window open
   } catch (e) { cloudStatus(e.code === 'auth/popup-closed-by-user' ? '' : 'Sign-in failed: ' + e.message); }
 };
-$('acctsync').onclick = () => { cloudStatus('Syncing…'); cloudPush(); };
+// automatic sync both ways: send unsent changes when leaving the tab, and fetch other devices' changes on coming back
+async function cloudPull() {
+  if (!cloud.ready || cloud.timer || cloud.pulling) return; // unsent changes here go first
+  cloud.pulling = true;
+  try {
+    const { fs, db } = cloud.fb, u = cloud.user, ss = recall('cloudSync', null) || { at: 0 };
+    const at = (await fs.get(fs.ref(db, 'users/' + u.uid + '/at'))).val();
+    if (!(at > ss.at) || cloud.timer) return;
+    if (frames.length) { // don't throw away a loaded timelapse (or a video being made): say so instead
+      if (!cloud.told) setStatus('Your placemarks or settings were changed on another device. Reload the page to see them.');
+      cloud.told = true; return;
+    }
+    const d = (await fs.get(fs.ref(db, 'users/' + u.uid))).val();
+    if (!d || !d.kv) return;
+    await cloudApply(kvIn(d.kv), false); store('cloudSync', { uid: u.uid, at: d.at }); location.reload();
+  } catch (e) { /* offline: try again next time */ } finally { cloud.pulling = false; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { if (cloud.timer) cloudPush(); } else cloudPull();
+});
+setInterval(() => { if (document.hidden) cloudPull(); }, 60000); // a tab left open in the background keeps up too
 $('acctoff').onclick = async () => {
   clearTimeout(cloud.timer); if (cloud.ready) await cloudPush(); // keep the latest changes in the account
   cloud.ready = false; store('cloudSync', null); // the next sign-in here combines placemarks again instead of replacing them
