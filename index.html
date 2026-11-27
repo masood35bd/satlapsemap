@@ -197,6 +197,7 @@
   #mpcanvas { display:block; max-width:calc(100vw - 340px); max-height:calc(100vh - 32px); width:auto; height:auto; background:#fff; }
   .mph { position:absolute; border:2px dashed #35c2a1; background:rgba(53,194,161,.08); cursor:move; box-sizing:border-box; touch-action:none; }
   .mph:hover, .mph.drag { background:rgba(53,194,161,.22); border-style:solid; }
+  .mph .mprs { position:absolute; right:-7px; bottom:-7px; width:14px; height:14px; background:#35c2a1; border:2px solid #fff; border-radius:3px; cursor:nwse-resize; box-sizing:border-box; touch-action:none; }
   .mph span { position:absolute; left:-2px; top:-20px; font:600 11px/18px system-ui,sans-serif; color:#04201a; background:#35c2a1; padding:0 5px; border-radius:3px 3px 0 0; white-space:nowrap; pointer-events:none; }
   #mpside { width:300px; flex:0 0 300px; background:var(--panel); color:var(--text); border-left:1px solid var(--line); padding:14px 16px; overflow-y:auto; font-size:13px; box-sizing:border-box; display:flex; flex-direction:column; gap:4px; }
   #mpside h3 { margin:0 0 4px; font-size:15px; }
@@ -2927,6 +2928,7 @@ function legendItems(u) {
 // colors: { original legend colour → colour picked in the preview }; saved maps draw those layers (and legend rows) in the new colour
 let frameLay = Object.assign({ pos: {}, hide: {}, legOff: [], colors: {} }, recall('frameLay', {}));
 if (!frameLay.colors) frameLay.colors = {};
+if (!frameLay.size) frameLay.size = {}; // key -> size factor set in the preview (1 = normal)
 const saveLay = () => store('frameLay', frameLay);
 const recolor = v => (typeof v === 'string' && v[0] === '#' && frameLay.colors[hex6(v)]) || v;
 const hex6 = v => { // '#abc' / '#AABBCC' → '#aabbcc'; anything else → null
@@ -2947,20 +2949,28 @@ let placeTmp = null;
 // draws one element: fn draws it at its usual spot and returns its box [x, y, w, h]; if it has been moved in the preview,
 // it is drawn on a spare canvas and copied to its new spot. Boxes are kept on c._boxes for the preview's drag handles.
 function placeEl(c, key, fn) {
-  const boxes = c._boxes || (c._boxes = {}), p = frameLay.pos[key];
-  if (!p) { const b = fn(c.getContext('2d')); if (b) boxes[key] = b; return; }
+  const boxes = c._boxes || (c._boxes = {}), p = frameLay.pos[key], s0 = frameLay.size[key] || 1;
+  if (!p && s0 === 1) { const b = fn(c.getContext('2d')); if (b) boxes[key] = b; return; }
   if (!placeTmp || placeTmp.width !== c.width || placeTmp.height !== c.height) placeTmp = newCanvas(c.width, c.height);
   const t = placeTmp.getContext('2d'); t.clearRect(0, 0, c.width, c.height);
   const b = fn(t); if (!b) return;
-  // new spot for the box, kept inside the map picture (not over the border and lat/lon labels)
+  // new size and spot for the box, kept inside the map picture (not over the border and lat/lon labels)
   const [ix, iy, iw, ih] = c._inner || [0, 0, c.width, c.height];
-  const L = Math.round(Math.min(ix + iw - b[2], Math.max(ix, p[0] * c.width))), T = Math.round(Math.min(iy + ih - b[3], Math.max(iy, p[1] * c.height)));
+  const s = Math.min(s0, iw / b[2], ih / b[3]), w = b[2] * s, h = b[3] * s;
+  let L0, T0;
+  if (p) { L0 = p[0] * c.width; T0 = p[1] * c.height; }
+  else { // resized but not moved: grow from the corner it sits in
+    L0 = b[0] + b[2] / 2 > ix + iw / 2 ? b[0] + b[2] - w : b[0];
+    T0 = b[1] + b[3] / 2 > iy + ih / 2 ? b[1] + b[3] - h : b[1];
+  }
+  const L = Math.round(Math.min(ix + iw - w, Math.max(ix, L0))), T = Math.round(Math.min(iy + ih - h, Math.max(iy, T0)));
   const m = 3, bx = Math.max(0, Math.floor(b[0]) - m), by = Math.max(0, Math.floor(b[1]) - m); // copy a little extra for outlines
   const bw = Math.min(c.width - bx, Math.ceil(b[2]) + 2 * m), bh = Math.min(c.height - by, Math.ceil(b[3]) + 2 * m);
   const x = c.getContext('2d'); x.save(); x.beginPath(); x.rect(ix, iy, iw, ih); x.clip();
-  x.drawImage(placeTmp, bx, by, bw, bh, L - (b[0] - bx), T - (b[1] - by), bw, bh);
+  x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+  x.drawImage(placeTmp, bx, by, bw, bh, L - (b[0] - bx) * s, T - (b[1] - by) * s, bw * s, bh * s);
   x.restore();
-  boxes[key] = [L, T, b[2], b[3]];
+  boxes[key] = [L, T, w, h];
 }
 // draws the legend box with its bottom-left corner at (left, bottom); rows that don't fit in maxH are left out.
 // Returns its box [x, y, w, h].
@@ -3354,7 +3364,7 @@ document.body.insertAdjacentHTML('beforeend', `<div id="mprev" role="dialog" ari
   <div id="mpstage"><div id="mpwrap"><canvas id="mpcanvas"></canvas></div></div>
   <div id="mpside">
     <h3>Map preview</h3>
-    <div class="hint">Drag the outlined boxes on the map to move them. This layout is kept for your next saves too.</div>
+    <div class="hint">Drag the outlined boxes on the map to move them, and drag a box's bottom-right corner to make it bigger or smaller. Double-click a box to put it back. This layout is kept for your next saves too.</div>
     <div class="subhd">Map title</div>
     <input id="mptitle" type="text" maxlength="120" placeholder="No title">
     <div class="subhd">Show on map</div>
@@ -3383,9 +3393,26 @@ function openMapPreview(f) {
       wrap.querySelectorAll('.mph').forEach(h => h.remove());
       const k = cv.clientWidth / c.width;
       for (const [key, b] of Object.entries(c._boxes || {})) {
-        const h = document.createElement('div'); h.className = 'mph'; h.title = 'Drag to move · double-click to put back';
-        h.innerHTML = `<span>${MP_NAMES[key]}</span>`;
+        const h = document.createElement('div'); h.className = 'mph'; h.title = 'Drag to move · drag the corner to resize · double-click to put back';
+        h.innerHTML = `<span>${MP_NAMES[key]}</span><i class="mprs" title="Drag to resize"></i>`;
         Object.assign(h.style, { left: b[0] * k + 'px', top: b[1] * k + 'px', width: b[2] * k + 'px', height: b[3] * k + 'px' });
+        h.querySelector('.mprs').addEventListener('pointerdown', e => { // resize from the bottom-right corner, top-left stays put
+          e.preventDefault(); e.stopPropagation(); h.classList.add('drag');
+          const [ix, iy, iw, ih] = c._inner || [0, 0, c.width, c.height];
+          const s0 = frameLay.size[key] || 1, w0 = b[2] * k, h0 = b[3] * k, sx = e.clientX, sy = e.clientY;
+          const fmax = Math.min((ix + iw - b[0]) / b[2], (iy + ih - b[1]) / b[3]); // grow only as far as the map picture allows
+          let f = 1;
+          const mv = ev => {
+            f = Math.max(0.3 / s0, Math.min(fmax, 4 / s0, Math.max((w0 + ev.clientX - sx) / w0, (h0 + ev.clientY - sy) / h0)));
+            h.style.width = w0 * f + 'px'; h.style.height = h0 * f + 'px';
+          };
+          const up = () => {
+            document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); h.classList.remove('drag');
+            if (Math.abs(f - 1) < 0.02) return;
+            frameLay.size[key] = +(s0 * f).toFixed(3); frameLay.pos[key] = [b[0] / c.width, b[1] / c.height]; saveLay(); render();
+          };
+          document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+        });
         h.addEventListener('pointerdown', e => {
           e.preventDefault(); h.classList.add('drag');
           const [ix, iy, iw, ih] = c._inner || [0, 0, c.width, c.height]; // stay inside the map picture
@@ -3399,7 +3426,7 @@ function openMapPreview(f) {
           };
           document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
         });
-        h.addEventListener('dblclick', () => { delete frameLay.pos[key]; saveLay(); render(); });
+        h.addEventListener('dblclick', () => { delete frameLay.pos[key]; delete frameLay.size[key]; saveLay(); render(); });
         wrap.appendChild(h);
       }
     };
@@ -3441,7 +3468,7 @@ function openMapPreview(f) {
     $('mp-legend').onchange = () => { setBox('legend', $('mp-legend').checked); render(); };
     $('mp-north').onchange = () => { frameLay.hide.north = !$('mp-north').checked; saveLay(); render(); };
     $('mp-scale').onchange = () => { frameLay.hide.scale = !$('mp-scale').checked; saveLay(); render(); };
-    $('mpreset').onclick = () => { frameLay.pos = {}; frameLay.colors = {}; saveLay(); ovVersion++; render(); };
+    $('mpreset').onclick = () => { frameLay.pos = {}; frameLay.size = {}; frameLay.colors = {}; saveLay(); ovVersion++; render(); };
     const onResize = () => c && handles();
     const key = e => { if (e.key === 'Escape') close(false); };
     const close = ok => {
