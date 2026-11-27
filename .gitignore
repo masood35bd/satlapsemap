@@ -1,0 +1,27 @@
+# Only the website itself goes to GitHub: ignore everything, then list the site files.
+# (Backups, KMZ/shapefile sources, converter scripts, images and notes stay local.)
+*
+!.gitignore
+!index.html
+!site.webmanifest
+!og-image.jpg
+!sat-image-bd-icon-32x32.png
+!sat-image-bd-icon-180x180.png
+!sat-image-bd-icon-192x192.png
+!sat-image-bd-icon-512x512.png
+# map layer data loaded by index.html
+!bwdb-structures.js
+!bwdb-wl-stations.js
+!haor-boundaries.js
+!haors-52-29.js
+!bd-rivers.js
+!bd-major-rivers.js
+!bd-roads.js
+!polders.js
+!jica-works.js
+!jica-structures.js
+!canals.js
+!embankments.js
+!bank-protection.js
+!dredging.js
+!canal-structures.js
