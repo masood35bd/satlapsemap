@@ -2599,7 +2599,7 @@ function labelLines(f, mode) {
 }
 // date shown to the user for a frame: capture date (Wayback) or year (Sentinel-2)
 const shownDate = f => f.kind === 'wayback' ? (f.capture ? f.capture.date : 'date unknown') : f.date;
-function composeFrame(f, mode, base) { // base: optional blended imagery (transitions)
+function composeFrame(f, mode, base, labelTop = 8) { // base: optional blended imagery (transitions); labelTop: y of the date label
   const c = newCanvas(f.canvas.width, f.canvas.height), x = c.getContext('2d');
   x.drawImage(base || f.canvas, 0, 0);
   let osmUsed = false;
@@ -2614,9 +2614,9 @@ function composeFrame(f, mode, base) { // base: optional blended imagery (transi
     x.textBaseline = 'top';
     x.font = `bold ${fs}px system-ui,sans-serif`; let w = x.measureText(t1).width;
     if (t2) { x.font = `${fs2}px system-ui,sans-serif`; w = Math.max(w, x.measureText(t2).width); }
-    x.fillStyle = 'rgba(0,0,0,.6)'; x.fillRect(8, 8, w + pad * 2, fs * 1.4 + (t2 ? fs2 * 1.4 : 0));
-    x.fillStyle = '#fff'; x.font = `bold ${fs}px system-ui,sans-serif`; x.fillText(t1, 8 + pad, 8 + fs * 0.22);
-    if (t2) { x.fillStyle = '#d6dee8'; x.font = `${fs2}px system-ui,sans-serif`; x.fillText(t2, 8 + pad, 8 + fs * 1.3); }
+    x.fillStyle = 'rgba(0,0,0,.6)'; x.fillRect(8, labelTop, w + pad * 2, fs * 1.4 + (t2 ? fs2 * 1.4 : 0));
+    x.fillStyle = '#fff'; x.font = `bold ${fs}px system-ui,sans-serif`; x.fillText(t1, 8 + pad, labelTop + fs * 0.22);
+    if (t2) { x.fillStyle = '#d6dee8'; x.font = `${fs2}px system-ui,sans-serif`; x.fillText(t2, 8 + pad, labelTop + fs * 1.3); }
   }
   const at = f.attr + (osmUsed ? ' · Layers © OpenStreetMap contributors' : '') + ' · by SatLapseMap'; // site name, always at the bottom-right corner
   const fa = Math.max(10, Math.round(c.width / 85));
@@ -3076,26 +3076,35 @@ function addMapFrame(img, f) {
   if ($('inset').checked) placeEl(c, 'inset', x => drawInset(x, nw, se, Lm + W - pad, Tm + H - Math.max(10, Math.round(W / 85)) - 8 - pad, W, H, fs, lw));
   // map title (top-left, inside the image); shrinks to stay clear of the north arrow
   const title = $('maptitle').value.trim();
-  if (title) placeEl(c, 'title', x => {
-    const room = W - (frameLay.hide.north || frameLay.pos.north || frameLay.pos.title ? 0 : aw) - pad * 8;
-    let ts = Math.round(fs * 1.7);
-    x.save(); x.font = `bold ${ts}px system-ui,sans-serif`;
-    const tw0 = x.measureText(title).width;
-    if (tw0 > room) { ts = Math.max(10, Math.floor(ts * room / tw0)); x.font = `bold ${ts}px system-ui,sans-serif`; }
-    const tw = x.measureText(title).width;
-    x.fillStyle = 'rgba(255,255,255,.85)'; x.fillRect(Lm + pad, Tm + pad, tw + pad * 2, ts * 1.5);
-    x.fillStyle = '#000'; x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText(title, Lm + pad * 2, Tm + pad + ts * 0.78);
-    x.restore();
-    return [Lm + pad, Tm + pad, tw + pad * 2, ts * 1.5];
-  });
+  if (title) placeEl(c, 'title', x => drawTitle(x, title, Lm + pad, Tm + pad, fs, W - (frameLay.hide.north || frameLay.pos.north || frameLay.pos.title ? 0 : aw) - pad * 8));
   c._used = img._used; // for the preview's list of legend rows
   return c;
+}
+// map title in a white box with its top-left at (left, top); text size from fs, shrunk to fit room. Returns its box.
+function titleSize(title, fs, room) {
+  const m = newCanvas(1, 1).getContext('2d'); let ts = Math.round(fs * 1.7);
+  m.font = `bold ${ts}px system-ui,sans-serif`; const tw0 = m.measureText(title).width;
+  if (tw0 > room) ts = Math.max(10, Math.floor(ts * room / tw0));
+  return ts;
+}
+function drawTitle(x, title, left, top, fs, room) {
+  const ts = titleSize(title, fs, room), pad = fs * 0.6;
+  x.save(); x.font = `bold ${ts}px system-ui,sans-serif`;
+  const tw = x.measureText(title).width;
+  x.fillStyle = 'rgba(255,255,255,.85)'; x.fillRect(left, top, tw + pad * 2, ts * 1.5);
+  x.fillStyle = '#000'; x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText(title, left + pad, top + ts * 0.78);
+  x.restore();
+  return [left, top, tw + pad * 2, ts * 1.5];
 }
 // saved JPGs: with the map frame on, the date goes under the scale bar instead of the top-left label
 function finishJpg(f, mode) {
   if ($('furn').checked) return addMapFrame(composeFrame(f, '0'), f);
-  const c = composeFrame(f, mode), fs = Math.max(12, Math.round(c.width / 65));
-  const top = 8 + Math.max(14, Math.round(c.width / 28)) * 2.2 + 8; // below the date label at the top-left
+  // no frame: the map title (if any) at the top-left, the date label just under it
+  const W = f.canvas.width, fs = Math.max(12, Math.round(W / 65)), title = $('maptitle').value.trim(), room = W - 16 - fs * 1.2;
+  const titleH = title && !frameLay.pos.title ? Math.ceil(titleSize(title, fs, room) * 1.5) + 6 : 0; // a moved title leaves the corner free
+  const c = composeFrame(f, mode, null, 8 + titleH);
+  if (title) placeEl(c, 'title', x => drawTitle(x, title, 8, 8, fs, room));
+  const top = 8 + titleH + Math.max(14, Math.round(c.width / 28)) * 2.2 + 8; // below the title and date label at the top-left
   placeEl(c, 'legend', x => drawLegend(x, c._used, 8, c.height - 8, fs, c.height - 8 - top)); // bottom-left; the credits are at the bottom-right
   return c;
 }
