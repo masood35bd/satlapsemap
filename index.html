@@ -3400,7 +3400,7 @@ function openMapPreview(f) {
           e.preventDefault(); e.stopPropagation(); h.classList.add('drag');
           const [ix, iy, iw, ih] = c._inner || [0, 0, c.width, c.height];
           const s0 = frameLay.size[key] || 1, w0 = b[2] * k, h0 = b[3] * k, sx = e.clientX, sy = e.clientY;
-          const fmax = Math.min((ix + iw - b[0]) / b[2], (iy + ih - b[1]) / b[3]); // grow only as far as the map picture allows
+          const fmax = Math.min(iw / b[2], ih / b[3]); // up to the map picture's size; a part at the edge slides back inside
           let f = 1;
           const mv = ev => {
             f = Math.max(0.3 / s0, Math.min(fmax, 4 / s0, Math.max((w0 + ev.clientX - sx) / w0, (h0 + ev.clientY - sy) / h0)));
@@ -3409,7 +3409,8 @@ function openMapPreview(f) {
           const up = () => {
             document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); h.classList.remove('drag');
             if (Math.abs(f - 1) < 0.02) return;
-            frameLay.size[key] = +(s0 * f).toFixed(3); frameLay.pos[key] = [b[0] / c.width, b[1] / c.height]; saveLay(); render();
+            frameLay.size[key] = +(s0 * f).toFixed(3);
+            frameLay.pos[key] = [Math.min(b[0], ix + iw - b[2] * f) / c.width, Math.min(b[1], iy + ih - b[3] * f) / c.height]; saveLay(); render();
           };
           document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
         });
