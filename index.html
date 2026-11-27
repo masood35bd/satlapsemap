@@ -165,6 +165,32 @@
   .callout .cap .tx { min-width:4px; outline:none; }
   body.rotating, body.rotating * { cursor:var(--rotcur) !important; }
   body.resizing, body.resizing * { cursor:nwse-resize !important; }
+  /* save preview: the finished map on the left (drag its parts), choices on the right */
+  #mprev { position:fixed; inset:0; z-index:5000; background:rgba(0,0,0,.72); display:none; }
+  #mprev.on { display:flex; }
+  #mpstage { flex:1; min-width:0; display:flex; align-items:center; justify-content:center; padding:16px; overflow:auto; }
+  #mpwrap { position:relative; line-height:0; box-shadow:0 4px 24px rgba(0,0,0,.5); }
+  #mpcanvas { display:block; max-width:calc(100vw - 340px); max-height:calc(100vh - 32px); width:auto; height:auto; background:#fff; }
+  .mph { position:absolute; border:2px dashed #35c2a1; background:rgba(53,194,161,.08); cursor:move; box-sizing:border-box; touch-action:none; }
+  .mph:hover, .mph.drag { background:rgba(53,194,161,.22); border-style:solid; }
+  .mph span { position:absolute; left:-2px; top:-20px; font:600 11px/18px system-ui,sans-serif; color:#04201a; background:#35c2a1; padding:0 5px; border-radius:3px 3px 0 0; white-space:nowrap; pointer-events:none; }
+  #mpside { width:300px; flex:0 0 300px; background:var(--panel); color:var(--text); border-left:1px solid var(--line); padding:14px 16px; overflow-y:auto; font-size:13px; box-sizing:border-box; display:flex; flex-direction:column; gap:4px; }
+  #mpside h3 { margin:0 0 4px; font-size:15px; }
+  #mpside .subhd { margin-top:10px; }
+  #mpside label { display:flex; align-items:center; gap:8px; margin:3px 0; cursor:pointer; }
+  #mpside label.off { opacity:.45; cursor:default; }
+  #mpside input[type=checkbox] { width:auto; margin:0; }
+  #mpside .hint { color:var(--muted); font-size:12px; line-height:1.4; }
+  #mpleg .sw { flex:0 0 auto; width:14px; height:10px; border:1px solid rgba(0,0,0,.4); border-radius:2px; }
+  #mpleg .lt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #mpbtns { display:flex; gap:8px; margin-top:auto; padding-top:12px; }
+  #mpbtns button { margin:0; }
+  #mpbtns .sec2 { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:400; }
+  @media (max-width: 760px) { /* phones: map above, choices below */
+    #mprev.on { flex-direction:column; }
+    #mpcanvas { max-width:calc(100vw - 32px); max-height:52vh; }
+    #mpside { width:auto; flex:1 1 auto; border-left:none; border-top:1px solid var(--line); }
+  }
   .arrowend { border-radius:50%; background:#fff; border:2px solid #000; cursor:move; opacity:.3; transition:opacity .15s; }
   .arrowend:hover { opacity:1; }
   .vtx { border-radius:50%; background:#fff; border:2px solid #000; cursor:move; box-sizing:border-box; }
@@ -283,6 +309,7 @@ try { if (JSON.parse(localStorage.getItem('stl.theme')) === 'light') document.do
         <option value="8000">Maximum (8000 px)</option>
       </select></div>
   </div>
+  <label class="chk" style="margin-top:8px"><input type="checkbox" id="mapprev" checked> Preview before saving <span class="info" data-tip="Opens the finished map first, so you can drag the title, north arrow, scale bar, legend and location map to new spots, hide them, and choose which legend rows to keep.">ⓘ</span></label>
   <button id="savejpg" data-tip="Saves what is inside the white frame as a JPG, with the capture date written on it">Save Map</button>
   <progress id="jprog" value="0" max="1" style="display:none"></progress>
   <div id="jstatus" class="status"></div>
@@ -2691,11 +2718,33 @@ function legendItems(u) {
   const rows = new Set(); // merged layers can give the same row twice (e.g. Embankment): keep the first
   return it.filter(i => { const k = [i.t, i.c, i.sym, !!i.dash].join('|'); return !rows.has(k) && rows.add(k); });
 }
-// draws the legend box with its bottom-left corner at (left, bottom); rows that don't fit in maxH are left out
+// ---- layout of saved maps, set in the save preview: where each element sits, which are hidden, which legend rows are left out
+// pos[key] = [left, top] of the element's box as a fraction of the saved image; keys: title, north, scale, legend, inset
+let frameLay = Object.assign({ pos: {}, hide: {}, legOff: [] }, recall('frameLay', {}));
+const saveLay = () => store('frameLay', frameLay);
+const legKey = i => [i.t, i.c, i.sym, !!i.dash].join('|');
+let placeTmp = null;
+// draws one element: fn draws it at its usual spot and returns its box [x, y, w, h]; if it has been moved in the preview,
+// it is drawn on a spare canvas and copied to its new spot. Boxes are kept on c._boxes for the preview's drag handles.
+function placeEl(c, key, fn) {
+  const boxes = c._boxes || (c._boxes = {}), p = frameLay.pos[key];
+  if (!p) { const b = fn(c.getContext('2d')); if (b) boxes[key] = b; return; }
+  if (!placeTmp || placeTmp.width !== c.width || placeTmp.height !== c.height) placeTmp = newCanvas(c.width, c.height);
+  const t = placeTmp.getContext('2d'); t.clearRect(0, 0, c.width, c.height);
+  const b = fn(t); if (!b) return;
+  const m = 3, bx = Math.max(0, Math.floor(b[0]) - m), by = Math.max(0, Math.floor(b[1]) - m); // a little extra for outlines
+  const bw = Math.min(c.width - bx, Math.ceil(b[2]) + 2 * m), bh = Math.min(c.height - by, Math.ceil(b[3]) + 2 * m);
+  const nx = Math.round(Math.min(c.width - bw, Math.max(0, p[0] * c.width - m))), ny = Math.round(Math.min(c.height - bh, Math.max(0, p[1] * c.height - m)));
+  c.getContext('2d').drawImage(placeTmp, bx, by, bw, bh, nx, ny, bw, bh);
+  boxes[key] = [nx + m, ny + m, b[2], b[3]];
+}
+// draws the legend box with its bottom-left corner at (left, bottom); rows that don't fit in maxH are left out.
+// Returns its box [x, y, w, h].
 function drawLegend(x, used, left, bottom, fs, maxH) {
   if (!used || !$('legend').checked) return;
   const f = Math.max(10, Math.round(fs * 0.85)), row = Math.round(f * 1.4), sw = f * 1.4, pad = Math.round(f * 0.6);
-  let items = legendItems(used);
+  const off = new Set(frameLay.legOff);
+  let items = legendItems(used).filter(i => !off.has(legKey(i))); // rows unticked in the preview are left out
   const fit = Math.floor((maxH - pad * 2) / row) - 1; // one row for the heading
   if (!items.length || fit < 1) return;
   items = items.slice(0, fit);
@@ -2737,6 +2786,7 @@ function drawLegend(x, used, left, bottom, fs, maxH) {
     x.setLineDash([]); x.fillStyle = '#000'; x.fillText(it.t, sx + sw + pad, cy);
   });
   x.restore();
+  return [left, top, w, h];
 }
 
 // ================= map frame for saved JPGs: lat/lon border, scale bar, north arrow =================
@@ -2819,7 +2869,7 @@ function drawBdInset(x, nw, se, right, bottom, W, H, fs, lw) {
     x.fillStyle = '#e00000'; x.fill(); x.strokeStyle = '#fff'; x.lineWidth = Math.max(1, lw * 0.6); x.stroke();
   }
   x.restore();
-  return true;
+  return [bx, by, bw, bh];
 }
 // world country outlines (Natural Earth 1:50m via world-atlas), loaded once for locator maps outside Bangladesh
 let WORLD = null, worldLoading = null;
@@ -2916,7 +2966,7 @@ function drawWorldInset(x, nw, se, right, bottom, W, H, lw, hit) {
   x.restore();
   x.strokeStyle = '#000'; x.lineWidth = Math.max(1, lw * 0.6); x.strokeRect(bx, by, bw, bh);
   x.restore();
-  return true;
+  return [bx, by, bw, bh];
 }
 // locator map: the detailed Bangladesh map inside Bangladesh, the world outlines anywhere else
 function drawInset(x, nw, se, right, bottom, W, H, fs, lw) {
@@ -2976,49 +3026,64 @@ function addMapFrame(img, f) {
   meas.font = `${fa}px system-ui,sans-serif`;
   const dw = dateTxt ? meas.measureText(dateTxt).width + 12 : 0, dateX = creditsX - 4 - dw;
   meas.font = font;
-  const bx = Lm + pad * 2, scaleW = barW + extra + fs + pad * 2;
-  const dateInBox = dateTxt && Lm + dateX < bx + scaleW; // would overlap the scale-bar box
+  const bx = Lm + pad * 2, scaleW = barW + extra + fs + pad * 2, showScale = !frameLay.hide.scale;
+  // the date goes inside the scale-bar box when the box sits where the date strip would be (or the box was moved)
+  const dateInBox = showScale && dateTxt && (frameLay.pos.scale || Lm + dateX < bx + scaleW);
   const boxW = dateInBox ? Math.max(scaleW, meas.measureText(dateTxt).width + pad * 2) : scaleW;
   const boxH = fs * (dateInBox ? 3.7 : 2.4), by = Tm + H - boxH - pad;
-  x.fillStyle = 'rgba(255,255,255,.85)'; x.fillRect(bx - pad, by, boxW, boxH);
-  const barY = by + pad * 0.6 + fs;
-  if (dateInBox) { x.fillStyle = '#000'; x.textAlign = 'left'; x.textBaseline = 'top'; x.fillText(dateTxt, bx, barY + bh + fs * 0.45); }
-  else if (dateTxt) {
+  if (dateTxt && !dateInBox) { // date strip just left of the credits line
     x.font = `${fa}px system-ui,sans-serif`; x.textAlign = 'left'; x.textBaseline = 'alphabetic';
     x.fillStyle = 'rgba(0,0,0,.5)'; x.fillRect(Lm + dateX, Tm + H - fa - 8, dw, fa + 8);
     x.fillStyle = '#fff'; x.fillText(dateTxt, Lm + dateX + 6, Tm + H - 6);
-    x.font = font;
   }
-  for (let i = 0; i < 4; i++) { x.fillStyle = i % 2 ? '#fff' : '#000'; x.fillRect(bx + barW * i / 4, barY, barW / 4, bh); }
-  x.strokeStyle = '#000'; x.lineWidth = Math.max(1, lw * 0.7); x.strokeRect(bx, barY, barW, bh);
-  x.fillStyle = '#000'; x.textAlign = 'center'; x.textBaseline = 'bottom';
-  x.fillText('0', bx, barY - 2); x.fillText(String(val(dist / 2)), bx + barW / 2, barY - 2); x.fillText(lastLab, bx + barW, barY - 2);
+  // scale bar (bottom-left, inside the image)
+  if (showScale) placeEl(c, 'scale', x => {
+    x.save(); x.font = font;
+    x.fillStyle = 'rgba(255,255,255,.85)'; x.fillRect(bx - pad, by, boxW, boxH);
+    const barY = by + pad * 0.6 + fs;
+    if (dateInBox) { x.fillStyle = '#000'; x.textAlign = 'left'; x.textBaseline = 'top'; x.fillText(dateTxt, bx, barY + bh + fs * 0.45); }
+    for (let i = 0; i < 4; i++) { x.fillStyle = i % 2 ? '#fff' : '#000'; x.fillRect(bx + barW * i / 4, barY, barW / 4, bh); }
+    x.strokeStyle = '#000'; x.lineWidth = Math.max(1, lw * 0.7); x.strokeRect(bx, barY, barW, bh);
+    x.fillStyle = '#000'; x.textAlign = 'center'; x.textBaseline = 'bottom';
+    x.fillText('0', bx, barY - 2); x.fillText(String(val(dist / 2)), bx + barW / 2, barY - 2); x.fillText(lastLab, bx + barW, barY - 2);
+    x.restore();
+    return [bx - pad, by, boxW, boxH];
+  });
   // legend (bottom-left, just above the scale bar; keeps clear of the map title)
-  drawLegend(x, img._used, bx - pad, by - pad, fs, by - pad - Tm - pad - fs * 3.2);
+  const legBottom = showScale ? by - pad : Tm + H - pad;
+  placeEl(c, 'legend', x => drawLegend(x, img._used, bx - pad, legBottom, fs, legBottom - Tm - pad - fs * 3.2));
   // north arrow (top-right, inside the image)
   const ah = fs * 2.6, aw = ah * 0.55, ax = Lm + W - pad * 2 - aw / 2, ay = Tm + pad + fs * 1.2;
-  x.fillStyle = 'rgba(255,255,255,.85)'; x.fillRect(ax - aw / 2 - pad, Tm + pad, aw + pad * 2, ah + fs * 1.4 + pad);
-  x.fillStyle = '#000'; x.textAlign = 'center'; x.textBaseline = 'top';
-  x.font = `bold ${fs}px system-ui,sans-serif`; x.fillText('N', ax, Tm + pad * 1.2);
-  const tip = [ax, ay + pad * 0.5], base = ay + ah, notch = ay + ah * 0.72;
-  x.beginPath(); x.moveTo(...tip); x.lineTo(ax - aw / 2, base); x.lineTo(ax, notch); x.closePath(); x.fill();
-  x.beginPath(); x.moveTo(...tip); x.lineTo(ax + aw / 2, base); x.lineTo(ax, notch); x.closePath();
-  x.fillStyle = '#fff'; x.fill(); x.lineWidth = Math.max(1, lw * 0.8); x.stroke();
-  x.beginPath(); x.moveTo(...tip); x.lineTo(ax - aw / 2, base); x.lineTo(ax, notch); x.closePath(); x.stroke();
+  if (!frameLay.hide.north) placeEl(c, 'north', x => {
+    x.save();
+    x.fillStyle = 'rgba(255,255,255,.85)'; x.fillRect(ax - aw / 2 - pad, Tm + pad, aw + pad * 2, ah + fs * 1.4 + pad);
+    x.fillStyle = '#000'; x.strokeStyle = '#000'; x.textAlign = 'center'; x.textBaseline = 'top';
+    x.font = `bold ${fs}px system-ui,sans-serif`; x.fillText('N', ax, Tm + pad * 1.2);
+    const tip = [ax, ay + pad * 0.5], base = ay + ah, notch = ay + ah * 0.72;
+    x.beginPath(); x.moveTo(...tip); x.lineTo(ax - aw / 2, base); x.lineTo(ax, notch); x.closePath(); x.fill();
+    x.beginPath(); x.moveTo(...tip); x.lineTo(ax + aw / 2, base); x.lineTo(ax, notch); x.closePath();
+    x.fillStyle = '#fff'; x.fill(); x.lineWidth = Math.max(1, lw * 0.8); x.stroke();
+    x.beginPath(); x.moveTo(...tip); x.lineTo(ax - aw / 2, base); x.lineTo(ax, notch); x.closePath(); x.stroke();
+    x.restore();
+    return [ax - aw / 2 - pad, Tm + pad, aw + pad * 2, ah + fs * 1.4 + pad];
+  });
   // location map (bottom-right, above the credits line)
-  if ($('inset').checked) drawInset(x, nw, se, Lm + W - pad, Tm + H - Math.max(10, Math.round(W / 85)) - 8 - pad, W, H, fs, lw);
+  if ($('inset').checked) placeEl(c, 'inset', x => drawInset(x, nw, se, Lm + W - pad, Tm + H - Math.max(10, Math.round(W / 85)) - 8 - pad, W, H, fs, lw));
   // map title (top-left, inside the image); shrinks to stay clear of the north arrow
   const title = $('maptitle').value.trim();
-  if (title) {
-    const room = W - aw - pad * 8;
+  if (title) placeEl(c, 'title', x => {
+    const room = W - (frameLay.hide.north || frameLay.pos.north || frameLay.pos.title ? 0 : aw) - pad * 8;
     let ts = Math.round(fs * 1.7);
-    x.font = `bold ${ts}px system-ui,sans-serif`;
+    x.save(); x.font = `bold ${ts}px system-ui,sans-serif`;
     const tw0 = x.measureText(title).width;
     if (tw0 > room) { ts = Math.max(10, Math.floor(ts * room / tw0)); x.font = `bold ${ts}px system-ui,sans-serif`; }
     const tw = x.measureText(title).width;
     x.fillStyle = 'rgba(255,255,255,.85)'; x.fillRect(Lm + pad, Tm + pad, tw + pad * 2, ts * 1.5);
     x.fillStyle = '#000'; x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText(title, Lm + pad * 2, Tm + pad + ts * 0.78);
-  }
+    x.restore();
+    return [Lm + pad, Tm + pad, tw + pad * 2, ts * 1.5];
+  });
+  c._used = img._used; // for the preview's list of legend rows
   return c;
 }
 // saved JPGs: with the map frame on, the date goes under the scale bar instead of the top-left label
@@ -3026,7 +3091,7 @@ function finishJpg(f, mode) {
   if ($('furn').checked) return addMapFrame(composeFrame(f, '0'), f);
   const c = composeFrame(f, mode), fs = Math.max(12, Math.round(c.width / 65));
   const top = 8 + Math.max(14, Math.round(c.width / 28)) * 2.2 + 8; // below the date label at the top-left
-  drawLegend(c.getContext('2d'), c._used, 8, c.height - 8, fs, c.height - 8 - top); // bottom-left; the credits are at the bottom-right
+  placeEl(c, 'legend', x => drawLegend(x, c._used, 8, c.height - 8, fs, c.height - 8 - top)); // bottom-left; the credits are at the bottom-right
   return c;
 }
 function downloadBlob(b, name) {
@@ -3045,6 +3110,104 @@ function downloadCanvas(c, name, type = 'image/jpeg', quality = 0.92) {
   });
 }
 const safe = s => String(s).replace(/[^\w.-]+/g, '_');
+
+// ================= save preview: arrange the map's parts before saving =================
+$('mapprev').checked = recall('mapprev', true);
+$('mapprev').onchange = () => store('mapprev', $('mapprev').checked);
+const MP_NAMES = { title: 'Title', north: 'North arrow', scale: 'Scale bar', legend: 'Legend', inset: 'Location map' };
+document.body.insertAdjacentHTML('beforeend', `<div id="mprev" role="dialog" aria-modal="true" aria-label="Map preview">
+  <div id="mpstage"><div id="mpwrap"><canvas id="mpcanvas"></canvas></div></div>
+  <div id="mpside">
+    <h3>Map preview</h3>
+    <div class="hint">Drag the outlined boxes on the map to move them. This layout is kept for your next saves too.</div>
+    <div class="subhd">Map title</div>
+    <input id="mptitle" type="text" maxlength="120" placeholder="No title">
+    <div class="subhd">Show on map</div>
+    <label><input type="checkbox" id="mp-furn"> Border, lat/lon &amp; frame</label>
+    <label><input type="checkbox" id="mp-north"> North arrow</label>
+    <label><input type="checkbox" id="mp-scale"> Scale bar &amp; date</label>
+    <label><input type="checkbox" id="mp-inset"> Location map</label>
+    <label><input type="checkbox" id="mp-legend"> Legend</label>
+    <div class="subhd">Legend items</div>
+    <div id="mpleg"></div>
+    <div id="mpbtns"><button id="mpsave">Save JPG</button><button id="mpreset" class="sec2" title="Put every part back in its usual spot">Reset</button><button id="mpcancel" class="sec2">Cancel</button></div>
+  </div></div>`);
+// shows the finished map; resolves true when Save is pressed, false on Cancel / Esc
+function openMapPreview(f) {
+  return new Promise(done => {
+    const dlg = $('mprev'), wrap = $('mpwrap'), cv = $('mpcanvas');
+    let c = null;
+    const render = () => {
+      c = finishJpg(f, 'cap');
+      cv.width = c.width; cv.height = c.height; cv.getContext('2d').drawImage(c, 0, 0);
+      sync(); requestAnimationFrame(handles); legendList();
+    };
+    // the drag boxes, scaled from saved-image pixels to the shown size
+    const handles = () => {
+      wrap.querySelectorAll('.mph').forEach(h => h.remove());
+      const k = cv.clientWidth / c.width;
+      for (const [key, b] of Object.entries(c._boxes || {})) {
+        const h = document.createElement('div'); h.className = 'mph'; h.title = 'Drag to move · double-click to put back';
+        h.innerHTML = `<span>${MP_NAMES[key]}</span>`;
+        Object.assign(h.style, { left: b[0] * k + 'px', top: b[1] * k + 'px', width: b[2] * k + 'px', height: b[3] * k + 'px' });
+        h.addEventListener('pointerdown', e => {
+          e.preventDefault(); h.setPointerCapture(e.pointerId); h.classList.add('drag');
+          const sx = e.clientX, sy = e.clientY, l0 = b[0] * k, t0 = b[1] * k, maxL = cv.clientWidth - b[2] * k, maxT = cv.clientHeight - b[3] * k;
+          let l = l0, t = t0;
+          const mv = ev => { l = Math.max(0, Math.min(maxL, l0 + ev.clientX - sx)); t = Math.max(0, Math.min(maxT, t0 + ev.clientY - sy)); h.style.left = l + 'px'; h.style.top = t + 'px'; };
+          const up = () => {
+            h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.classList.remove('drag');
+            if (Math.abs(l - l0) + Math.abs(t - t0) < 2) return; // just a click
+            frameLay.pos[key] = [l / k / c.width, t / k / c.height]; saveLay(); render();
+          };
+          h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up);
+        });
+        h.addEventListener('dblclick', () => { delete frameLay.pos[key]; saveLay(); render(); });
+        wrap.appendChild(h);
+      }
+    };
+    // ticks mirror the settings in the panel (and are remembered the same way)
+    const sync = () => {
+      const furn = $('furn').checked;
+      $('mptitle').value = $('maptitle').value;
+      $('mp-furn').checked = furn; $('mp-legend').checked = $('legend').checked; $('mp-inset').checked = $('inset').checked;
+      $('mp-north').checked = !frameLay.hide.north; $('mp-scale').checked = !frameLay.hide.scale;
+      for (const id of ['mp-north', 'mp-scale', 'mp-inset']) { $(id).disabled = !furn; $(id).parentElement.classList.toggle('off', !furn); }
+    };
+    const legendList = () => {
+      const el = $('mpleg'), items = c._used ? legendItems(c._used) : [], off = new Set(frameLay.legOff);
+      el.innerHTML = '';
+      if (!items.length) { el.innerHTML = '<div class="hint">No map layers inside the saved area.</div>'; return; }
+      for (const it of items) {
+        const lb = document.createElement('label'), cb = document.createElement('input'), k = legKey(it);
+        cb.type = 'checkbox'; cb.checked = !off.has(k); cb.disabled = !$('legend').checked;
+        cb.onchange = () => { frameLay.legOff = cb.checked ? frameLay.legOff.filter(x => x !== k) : [...frameLay.legOff, k]; saveLay(); render(); };
+        lb.classList.toggle('off', cb.disabled);
+        lb.append(cb, Object.assign(document.createElement('span'), { className: 'sw', style: `background:${it.c}` }), Object.assign(document.createElement('span'), { className: 'lt', textContent: it.t, title: it.t }));
+        el.appendChild(lb);
+      }
+    };
+    const setBox = (id, v) => { $(id).checked = v; $(id).onchange(); };
+    $('mptitle').oninput = () => { $('maptitle').value = $('mptitle').value; store('maptitle', $('maptitle').value); render(); };
+    $('mp-furn').onchange = async () => { setBox('furn', $('mp-furn').checked); await ensureWorld(); render(); };
+    $('mp-inset').onchange = async () => { setBox('inset', $('mp-inset').checked); await ensureWorld(); render(); };
+    $('mp-legend').onchange = () => { setBox('legend', $('mp-legend').checked); render(); };
+    $('mp-north').onchange = () => { frameLay.hide.north = !$('mp-north').checked; saveLay(); render(); };
+    $('mp-scale').onchange = () => { frameLay.hide.scale = !$('mp-scale').checked; saveLay(); render(); };
+    $('mpreset').onclick = () => { frameLay.pos = {}; saveLay(); render(); };
+    const onResize = () => c && handles();
+    const key = e => { if (e.key === 'Escape') close(false); };
+    const close = ok => {
+      dlg.classList.remove('on'); removeEventListener('resize', onResize); document.removeEventListener('keydown', key, true);
+      wrap.querySelectorAll('.mph').forEach(h => h.remove()); cv.width = cv.height = 1; // free the big canvas
+      done(ok);
+    };
+    $('mpsave').onclick = () => close(true);
+    $('mpcancel').onclick = () => close(false);
+    addEventListener('resize', onResize); document.addEventListener('keydown', key, true);
+    dlg.classList.add('on'); render(); $('mpsave').focus();
+  });
+}
 
 // ================= save current frame area as JPG =================
 $('savejpg').onclick = async () => {
@@ -3085,6 +3248,10 @@ $('savejpg').onclick = async () => {
     step('Drawing map frame…', 0.9);
     await new Promise(r => setTimeout(r)); // let the bar repaint before the heavy drawing
     const c0 = f.g.center, d = f.kind === 'osm' ? today() : f.kind !== 'wayback' ? f.date : (f.capture ? f.capture.date : 'undated');
+    if ($('mapprev').checked) {
+      step('Preview open: arrange the map, then press Save JPG.', 0.92);
+      if (!(await openMapPreview(f))) { step('Save cancelled.'); return; }
+    }
     const out = finishJpg(f, 'cap');
     step('Saving JPG…', 0.96);
     await downloadCanvas(out, `satlapsemap-${safe(d)}-${c0.lat.toFixed(4)}_${c0.lng.toFixed(4)}.jpg`, 'image/jpeg', 0.95);
@@ -3092,9 +3259,10 @@ $('savejpg').onclick = async () => {
     logSave('JPG', { size: `${f.g.w}x${f.g.h}`, imageDate: f.kind === 'osm' ? 'map view' : d });
   } catch (e) {
     step('Save failed: ' + (e.name === 'SecurityError' ? 'a tile server blocked image export.' : e.message));
+  } finally { // also after Cancel in the preview
+    prog.style.display = 'none';
+    btn.disabled = false;
   }
-  prog.style.display = 'none';
-  btn.disabled = false;
 };
 
 // ================= full screen (map and timelapse preview) =================
