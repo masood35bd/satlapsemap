@@ -3152,7 +3152,7 @@ function openMapPreview(f) {
     const dlg = $('mprev'), wrap = $('mpwrap'), cv = $('mpcanvas');
     let c = null;
     const render = () => {
-      c = finishJpg(f, 'cap');
+      c = finishJpg(f, '0');
       cv.width = c.width; cv.height = c.height; cv.getContext('2d').drawImage(c, 0, 0);
       sync(); requestAnimationFrame(handles); legendList();
     };
@@ -3267,7 +3267,7 @@ $('savejpg').onclick = async () => {
       step('Preview open: arrange the map, then press Save JPG.', 0.92);
       if (!(await openMapPreview(f))) { step('Save cancelled.'); return; }
     }
-    const out = finishJpg(f, 'cap');
+    const out = finishJpg(f, '0');
     step('Saving JPG…', 0.96);
     await downloadCanvas(out, `satlapsemap-${safe(d)}-${c0.lat.toFixed(4)}_${c0.lng.toFixed(4)}.jpg`, 'image/jpeg', 0.95);
     step(`Saved JPG (${out.width}×${out.height}px)` + (f.miss ? ` — ${f.miss} tile(s) failed to load.` : '.'), 1);
