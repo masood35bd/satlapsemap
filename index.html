@@ -182,6 +182,11 @@
   #mpside input[type=checkbox] { width:auto; margin:0; }
   #mpside .hint { color:var(--muted); font-size:12px; line-height:1.4; }
   #mpleg .sw { flex:0 0 auto; width:14px; height:10px; border:1px solid rgba(0,0,0,.4); border-radius:2px; }
+  #mpleg .mprow { display:flex; align-items:center; gap:6px; }
+  #mpleg .mprow label { flex:1; min-width:0; }
+  #mpleg input[type=color] { flex:0 0 auto; width:26px; height:20px; padding:0; margin:0; border:1px solid var(--line); border-radius:3px; background:none; cursor:pointer; }
+  #mpleg input[type=color]:disabled { opacity:.45; cursor:default; }
+  #mpleg .mprow.chg input[type=color] { box-shadow:0 0 0 2px var(--acc); } /* colour changed from the original */
   #mpleg .lt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #mpbtns { display:flex; gap:8px; margin-top:auto; padding-top:12px; }
   #mpbtns button { margin:0; }
@@ -2408,7 +2413,7 @@ function overlayCanvas(g) {
   if (!on.length && !bw && !mk && !wl && !ha && !h8 && !rv && !mj && !rd && !po && !jw && !jp && !wk.length && !cs && !je) return null;
   const key = [ovVersion, on.join(), bw, mk, wl, ha, h8, rv, mj, rd, po, jw, jp, wk.join(), cs, je, map.getZoom(), g.z, g.nw.x, g.nw.y, g.w, g.h].join('|');
   if (ovCache.key === key) return ovCache.c;
-  const c = newCanvas(g.w, g.h), x = c.getContext('2d'), s = Math.max(1, g.w / 900);
+  const c = newCanvas(g.w, g.h), x = recolorCtx(c.getContext('2d')), s = Math.max(1, g.w / 900); // colours picked in the save preview
   x.lineJoin = x.lineCap = 'round';
   for (const k of on) {
     const d = LAYERS[k];
@@ -2720,8 +2725,24 @@ function legendItems(u) {
 }
 // ---- layout of saved maps, set in the save preview: where each element sits, which are hidden, which legend rows are left out
 // pos[key] = [left, top] of the element's box as a fraction of the saved image; keys: title, north, scale, legend, inset
-let frameLay = Object.assign({ pos: {}, hide: {}, legOff: [] }, recall('frameLay', {}));
+// colors: { original legend colour → colour picked in the preview }; saved maps draw those layers (and legend rows) in the new colour
+let frameLay = Object.assign({ pos: {}, hide: {}, legOff: [], colors: {} }, recall('frameLay', {}));
+if (!frameLay.colors) frameLay.colors = {};
 const saveLay = () => store('frameLay', frameLay);
+const recolor = v => (typeof v === 'string' && v[0] === '#' && frameLay.colors[hex6(v)]) || v;
+const hex6 = v => { // '#abc' / '#AABBCC' → '#aabbcc'; anything else → null
+  const s = String(v).toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(s) ? s : /^#[0-9a-f]{3}$/.test(s) ? '#' + [...s.slice(1)].map(ch => ch + ch).join('') : null;
+};
+// a canvas context whose fill and stroke colours pass through recolor(): every layer drawn on it follows the picked colours
+function recolorCtx(x) {
+  const P = CanvasRenderingContext2D.prototype;
+  for (const k of ['fillStyle', 'strokeStyle']) {
+    const d = Object.getOwnPropertyDescriptor(P, k);
+    Object.defineProperty(x, k, { configurable: true, get() { return d.get.call(x); }, set(v) { d.set.call(x, recolor(v)); } });
+  }
+  return x;
+}
 const legKey = i => [i.t, i.c, i.sym, !!i.dash].join('|');
 let placeTmp = null;
 // draws one element: fn draws it at its usual spot and returns its box [x, y, w, h]; if it has been moved in the preview,
@@ -2748,7 +2769,8 @@ function drawLegend(x, used, left, bottom, fs, maxH) {
   if (!used || !$('legend').checked) return;
   const f = Math.max(10, Math.round(fs * 0.85)), row = Math.round(f * 1.4), sw = f * 1.4, pad = Math.round(f * 0.6);
   const off = new Set(frameLay.legOff);
-  let items = legendItems(used).filter(i => !off.has(legKey(i))); // rows unticked in the preview are left out
+  let items = legendItems(used).filter(i => !off.has(legKey(i))) // rows unticked in the preview are left out
+    .map(i => ({ ...i, c: recolor(i.c) })); // in the colour picked in the preview
   const fit = Math.floor((maxH - pad * 2) / row) - 1; // one row for the heading
   if (!items.length || fit < 1) return;
   items = items.slice(0, fit);
@@ -3143,8 +3165,9 @@ document.body.insertAdjacentHTML('beforeend', `<div id="mprev" role="dialog" ari
     <label><input type="checkbox" id="mp-inset"> Location map</label>
     <label><input type="checkbox" id="mp-legend"> Legend</label>
     <div class="subhd">Legend items</div>
+    <div class="hint">Untick to leave a row out. Click a colour to change it on the saved map too; double-click it for the original. Items that share a colour change together.</div>
     <div id="mpleg"></div>
-    <div id="mpbtns"><button id="mpsave">Save JPG</button><button id="mpreset" class="sec2" title="Put every part back in its usual spot">Reset</button><button id="mpcancel" class="sec2">Cancel</button></div>
+    <div id="mpbtns"><button id="mpsave">Save JPG</button><button id="mpreset" class="sec2" title="Put every part back in its usual spot and restore the original colours">Reset</button><button id="mpcancel" class="sec2">Cancel</button></div>
   </div></div>`);
 // shows the finished map; resolves true when Save is pressed, false on Cancel / Esc
 function openMapPreview(f) {
@@ -3194,12 +3217,22 @@ function openMapPreview(f) {
       el.innerHTML = '';
       if (!items.length) { el.innerHTML = '<div class="hint">No map layers inside the saved area.</div>'; return; }
       for (const it of items) {
-        const lb = document.createElement('label'), cb = document.createElement('input'), k = legKey(it);
+        const row = document.createElement('div'), lb = document.createElement('label'), cb = document.createElement('input'), k = legKey(it);
+        row.className = 'mprow';
         cb.type = 'checkbox'; cb.checked = !off.has(k); cb.disabled = !$('legend').checked;
         cb.onchange = () => { frameLay.legOff = cb.checked ? frameLay.legOff.filter(x => x !== k) : [...frameLay.legOff, k]; saveLay(); render(); };
         lb.classList.toggle('off', cb.disabled);
-        lb.append(cb, Object.assign(document.createElement('span'), { className: 'sw', style: `background:${it.c}` }), Object.assign(document.createElement('span'), { className: 'lt', textContent: it.t, title: it.t }));
-        el.appendChild(lb);
+        lb.append(cb, Object.assign(document.createElement('span'), { className: 'lt', textContent: it.t, title: it.t }));
+        row.appendChild(lb);
+        const orig = hex6(it.c);
+        if (orig) { // colour picker: recolours this row and the matching features on the saved map
+          const col = Object.assign(document.createElement('input'), { type: 'color', value: hex6(recolor(orig)) || orig, title: 'Colour on the saved map · double-click for the original' });
+          row.classList.toggle('chg', !!frameLay.colors[orig]);
+          col.onchange = () => { if (col.value.toLowerCase() === orig) delete frameLay.colors[orig]; else frameLay.colors[orig] = col.value.toLowerCase(); saveLay(); ovVersion++; render(); };
+          col.ondblclick = e => { e.preventDefault(); delete frameLay.colors[orig]; saveLay(); ovVersion++; render(); };
+          row.appendChild(col);
+        } else row.appendChild(Object.assign(document.createElement('span'), { className: 'sw', style: `background:${it.c}` }));
+        el.appendChild(row);
       }
     };
     const setBox = (id, v) => { $(id).checked = v; $(id).onchange(); };
@@ -3209,7 +3242,7 @@ function openMapPreview(f) {
     $('mp-legend').onchange = () => { setBox('legend', $('mp-legend').checked); render(); };
     $('mp-north').onchange = () => { frameLay.hide.north = !$('mp-north').checked; saveLay(); render(); };
     $('mp-scale').onchange = () => { frameLay.hide.scale = !$('mp-scale').checked; saveLay(); render(); };
-    $('mpreset').onclick = () => { frameLay.pos = {}; saveLay(); render(); };
+    $('mpreset').onclick = () => { frameLay.pos = {}; frameLay.colors = {}; saveLay(); ovVersion++; render(); };
     const onResize = () => c && handles();
     const key = e => { if (e.key === 'Escape') close(false); };
     const close = ok => {
