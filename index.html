@@ -242,9 +242,7 @@ try { if (JSON.parse(localStorage.getItem('stl.theme')) === 'light') document.do
   <dialog id="acct" aria-labelledby="accthd">
     <h2 id="accthd"><img id="acctpic" alt="" hidden><span id="acctname">Sign in (optional)</span></h2>
     <div id="acctout">
-      <p>Everything works without an account. Sign in with Google to keep your placemarks, paths, layer choices and map layout on every computer and phone you use.</p>
-      <p class="small">Your name and email are stored with your data, and with the anonymous save log, so the site's author can see who uses SatLapseMap. Sign out at any time; this browser keeps its own copy.</p>
-    </div>
+      <p>Everything works without an account. Sign in with Google to keep your placemarks, paths, layer choices and map layout on every computer and phone you use.</p>    </div>
     <div id="acctin" hidden>
       <p id="acctmail" class="small"></p>
       <p>Your placemarks and settings are kept in your account and follow you to any device where you sign in.</p>
@@ -615,7 +613,7 @@ $('acctsync').onclick = () => { cloudStatus('Syncing…'); cloudPush(); };
 $('acctoff').onclick = async () => {
   clearTimeout(cloud.timer); if (cloud.ready) await cloudPush(); // keep the latest changes in the account
   cloud.ready = false; store('cloudSync', null); // the next sign-in here combines placemarks again instead of replacing them
-  await cloud.fb.A.signOut(cloud.fb.auth); cloudStatus('Signed out. This browser keeps its own copy.');
+  await cloud.fb.A.signOut(cloud.fb.auth); cloudStatus('');
 };
 // ---- hover pop-ups for anything with data-tip (help text, credits)
 const tipEl = document.createElement('div'); tipEl.id = 'tip'; document.body.appendChild(tipEl);
