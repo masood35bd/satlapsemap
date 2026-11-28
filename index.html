@@ -218,10 +218,12 @@
   #mpbtns { display:flex; gap:8px; margin-top:auto; padding-top:12px; }
   #mpbtns button { margin:0; }
   #mpbtns .sec2 { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:400; }
-  @media (max-width: 760px) { /* phones: map above, choices below */
-    #mprev.on { flex-direction:column; }
-    #mpcanvas { max-width:calc(100vw - 32px); max-height:52vh; }
-    #mpside { width:auto; flex:1 1 auto; border-left:none; border-top:1px solid var(--line); }
+  @media (max-width: 760px) { /* phones: map above, choices below, and the whole preview scrolls up and down */
+    #mprev.on { flex-direction:column; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; }
+    #mpstage { flex:0 0 auto; padding:10px; overflow:visible; }
+    #mpcanvas { max-width:calc(100vw - 20px); max-height:70vh; }
+    #mpside { width:auto; flex:0 0 auto; overflow:visible; border-left:none; border-top:1px solid var(--line); }
+    #mpbtns { margin-top:8px; padding-bottom:12px; }
   }
   .arrowend { border-radius:50%; background:#fff; border:2px solid #000; cursor:move; opacity:.3; transition:opacity .15s; }
   .arrowend:hover { opacity:1; }
