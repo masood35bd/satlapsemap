@@ -199,8 +199,8 @@
   #mpcanvas { display:block; max-width:calc(100vw - 340px); max-height:calc(100vh - 32px); width:auto; height:auto; background:#fff; }
   .mph { position:absolute; border:2px dashed #35c2a1; background:rgba(53,194,161,.08); cursor:move; box-sizing:border-box; touch-action:none; }
   .mph:hover, .mph.drag { background:rgba(53,194,161,.22); border-style:solid; }
-  .mph .mprs { position:absolute; right:-7px; bottom:-7px; width:14px; height:14px; background:#35c2a1; border:2px solid #fff; border-radius:3px; cursor:nwse-resize; box-sizing:border-box; touch-action:none; }
-  .mph span { position:absolute; left:-2px; top:-20px; font:600 11px/18px system-ui,sans-serif; color:#04201a; background:#35c2a1; padding:0 5px; border-radius:3px 3px 0 0; white-space:nowrap; pointer-events:none; }
+  .mph .mprs { position:absolute; right:-4px; bottom:-4px; width:8px; height:8px; background:#35c2a1; border:1px solid #fff; border-radius:2px; cursor:nwse-resize; box-sizing:border-box; touch-action:none; }
+  .mph span { display:none; } /* the part's name shows as the box's hover tip instead */
   #mpside { width:300px; flex:0 0 300px; background:var(--panel); color:var(--text); border-left:1px solid var(--line); padding:14px 16px; overflow-y:auto; font-size:13px; box-sizing:border-box; display:flex; flex-direction:column; gap:4px; }
   #mpside h3 { margin:0 0 4px; font-size:15px; }
   #mpside .subhd { margin-top:10px; }
@@ -3404,7 +3404,7 @@ function openMapPreview(f) {
       wrap.querySelectorAll('.mph').forEach(h => h.remove());
       const k = cv.clientWidth / c.width;
       for (const [key, b] of Object.entries(c._boxes || {})) {
-        const h = document.createElement('div'); h.className = 'mph'; h.title = 'Drag to move · drag the corner to resize · double-click to put back';
+        const h = document.createElement('div'); h.className = 'mph'; h.title = MP_NAMES[key] + ': drag to move · drag the corner to resize · double-click to put back';
         h.innerHTML = `<span>${MP_NAMES[key]}</span><i class="mprs" title="Drag to resize"></i>`;
         Object.assign(h.style, { left: b[0] * k + 'px', top: b[1] * k + 'px', width: b[2] * k + 'px', height: b[3] * k + 'px' });
         h.querySelector('.mprs').addEventListener('pointerdown', e => { // resize from the bottom-right corner, top-left stays put
