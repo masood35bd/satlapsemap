@@ -473,7 +473,7 @@ const FIREBASE_CONFIG = {
   appId: '1:709241717901:web:0f17197400b4e46c3f0ec4'
 };
 const FB_VER = '10.12.2';
-const NO_SYNC = ['visitorId', 'marksBig', 'cloudSync', 'cloudOn']; // per-browser keys that never leave this browser
+const NO_SYNC = ['visitorId', 'marksBig', 'cloudSync', 'cloudOn', 'appOpened']; // per-browser keys that never leave this browser
 var cloud = { fb: null, user: null, ready: false, timer: 0 };
 function cloudQueue(k) { // a setting changed: send everything to the account a moment later
   if (!cloud.ready || NO_SYNC.includes(k)) return;
@@ -3998,7 +3998,16 @@ cloudBoot();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 let installAsk = null;
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); installAsk = e; $('installbtn').hidden = false; });
-addEventListener('appinstalled', () => { installAsk = null; $('installbtn').hidden = true; setStatus('SatLapseMap is installed: open it from the Start menu or taskbar.'); });
+addEventListener('appinstalled', () => { installAsk = null; $('installbtn').hidden = true; logApp('install'); setStatus('SatLapseMap is installed: open it from the Start menu or taskbar.'); });
+// count installs and installed copies in use (the same Google Sheet as the save counter, its "App" sheet)
+function logApp(event) {
+  if (!STATS_URL) return;
+  try {
+    fetch(STATS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, keepalive: true,
+      body: JSON.stringify({ event, visitor: visitorId, user: cloud.user ? cloud.user.email || '' : '' }) }).catch(() => {});
+  } catch (e) {}
+}
+if (matchMedia('(display-mode: standalone)').matches && recall('appOpened', '') !== today()) { store('appOpened', today()); logApp('open'); } // once a day per installed copy
 $('installbtn').onclick = async () => {
   if (!installAsk) return;
   installAsk.prompt(); const { outcome } = await installAsk.userChoice;
