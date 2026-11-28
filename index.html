@@ -3493,7 +3493,7 @@ function openMapPreview(f) {
     $('mpsave').onclick = () => close(true);
     $('mpcancel').onclick = () => close(false);
     addEventListener('resize', onResize); document.addEventListener('keydown', key, true);
-    dlg.classList.add('on'); render(); $('mpsave').focus();
+    dlg.classList.add('on'); render(); $('mpsave').focus({ preventScroll: true }); dlg.scrollTop = 0; // phones: start at the map, not the buttons
   });
 }
 
