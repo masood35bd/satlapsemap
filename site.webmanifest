@@ -1,12 +1,15 @@
 {
+  "id": "./",
   "name": "SatLapseMap",
   "short_name": "SatLapseMap",
   "description": "Satellite timelapses and maps of Bangladesh, right in your browser.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#0f1720",
   "theme_color": "#0f1720",
+  "categories": ["education", "utilities", "navigation"],
   "icons": [
     { "src": "sat-image-bd-icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "sat-image-bd-icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }

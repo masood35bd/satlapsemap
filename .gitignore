@@ -4,6 +4,7 @@
 !.gitignore
 !index.html
 !site.webmanifest
+!sw.js
 !og-image.jpg
 !sat-image-bd-icon-32x32.png
 !sat-image-bd-icon-180x180.png

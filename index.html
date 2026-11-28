@@ -58,6 +58,7 @@
   /* optional Google sign-in: a button beside About, and a small account window */
   h1.brand #signbtn { margin:0; width:auto; max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:3px 10px; font-size:12px; font-weight:600; background:transparent; color:var(--acc); border:1px solid var(--line); border-radius:12px; }
   h1.brand #signbtn:hover { border-color:var(--acc); }
+  h1.brand #installbtn { margin:0; width:auto; padding:3px 10px; font-size:12px; font-weight:600; background:var(--acc); color:#04201a; border:1px solid var(--acc); border-radius:12px; }
   #acct { max-width:min(400px, calc(100vw - 32px)); background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:20px 22px 16px; box-shadow:0 10px 40px rgba(0,0,0,.55); font-size:13px; line-height:1.55; }
   #acct::backdrop { background:rgba(0,0,0,.6); }
   #acct h2 { margin:0 0 8px; font-size:17px; text-transform:none; letter-spacing:0; color:var(--text); display:flex; align-items:center; gap:10px; }
@@ -239,7 +240,7 @@ try { if (JSON.parse(localStorage.getItem('stl.theme')) === 'light') document.do
 </head>
 <body>
 <aside>
-  <h1 class="brand"><img src="sat-image-bd-icon-192x192.png" alt="" width="32" height="32">SatLapseMap<button id="aboutbtn" type="button" title="What is SatLapseMap?">About</button><button id="signbtn" type="button" title="Optional: sign in with Google to keep your placemarks and settings on every device" hidden>Sign in</button></h1>
+  <h1 class="brand"><img src="sat-image-bd-icon-192x192.png" alt="" width="32" height="32">SatLapseMap<button id="aboutbtn" type="button" title="What is SatLapseMap?">About</button><button id="signbtn" type="button" title="Optional: sign in with Google to keep your placemarks and settings on every device" hidden>Sign in</button><button id="installbtn" type="button" title="Install SatLapseMap as an app on this computer: its own window, Start menu and taskbar icon" hidden>Install</button></h1>
   <dialog id="acct" aria-labelledby="accthd">
     <h2 id="accthd"><img id="acctpic" alt="" hidden><span id="acctname">Sign in (optional)</span></h2>
     <div id="acctout">
@@ -3991,6 +3992,17 @@ renderHist();
 setBasemap(recall('basemapV2', 'hyb'));
 if (anyOverlayOn()) refreshOverlays();
 cloudBoot();
+// ---- installable app: the service worker lets Edge/Chrome install the site as a Windows app; the Install button
+// appears only when the browser offers it (not when already installed or running as the app)
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+let installAsk = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installAsk = e; $('installbtn').hidden = false; });
+addEventListener('appinstalled', () => { installAsk = null; $('installbtn').hidden = true; setStatus('SatLapseMap is installed: open it from the Start menu or taskbar.'); });
+$('installbtn').onclick = async () => {
+  if (!installAsk) return;
+  installAsk.prompt(); const { outcome } = await installAsk.userChoice;
+  if (outcome === 'accepted') { installAsk = null; $('installbtn').hidden = true; }
+};
 </script>
 </body>
 </html>
