@@ -435,7 +435,7 @@ try { if (JSON.parse(localStorage.getItem('stl.theme')) === 'light') document.do
   <div class="footer">© Dr. Muhammad Masood<br><a href="mailto:masood35bd@yahoo.com">masood35bd@yahoo.com</a></div>
   <div class="note" id="lastupd" style="text-align:center;margin-top:8px">Last update: </div>
   <div style="text-align:center;margin-top:10px"><a href="https://info.flagcounter.com/qHju"><img src="https://s05.flagcounter.com/mini/qHju/bg_FFFFFF/txt_000000/border_CCCCCC/flags_0/" alt="Flag Counter" border="0"></a></div>
-  <div class="note" id="totsaves" style="text-align:center;margin-top:6px">… Maps saved</div>
+  <div class="note" id="totsaves" style="text-align:center;margin-top:6px">… maps saved</div>
 </aside>
 
 <main>
@@ -498,7 +498,7 @@ function logSave(format, info = {}) {
   if (!STATS_URL || location.protocol === 'data:' || location.protocol === 'file:') { el.style.display = 'none'; return; }
   fetch(STATS_URL).then(r => r.json()).then(d => {
     const apps = Math.max(+d.installs || 0, +d.appUsers || 0); // installed copies seen (installs, or opened since)
-    el.textContent = (+d.total || 0).toLocaleString() + ' Maps saved' + ('appUsers' in d ? ' | ' + apps.toLocaleString() + ' App installed' : '');
+    el.textContent = (+d.total || 0).toLocaleString() + ' maps saved' + ('appUsers' in d ? ' | ' + apps.toLocaleString() + ' installed' : '');
   })
     .catch(() => { el.style.display = 'none'; });
 })();
