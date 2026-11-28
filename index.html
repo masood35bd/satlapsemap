@@ -40,10 +40,11 @@
   body { margin:0; font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); height:100vh; display:grid; grid-template-columns:340px 1fr; }
   aside { background:var(--panel); border-right:1px solid var(--line); padding:16px; overflow:auto; }
   h1 { font-size:18px; margin:0 0 12px; }
-  h1.brand { display:flex; align-items:center; gap:10px; } /* site icon to the left of the title */
+  h1.brand { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  h1.brand .hbtns { margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; } /* About, Sign in, Install: wrap below the title when short of room */ /* site icon to the left of the title */
   h1.brand img { width:32px; height:32px; border-radius:7px; flex:0 0 32px; }
   /* About: a small button beside the title, and a short window */
-  h1.brand #aboutbtn { margin:0 0 0 auto; width:auto; padding:3px 10px; font-size:12px; font-weight:600; background:transparent; color:var(--acc); border:1px solid var(--line); border-radius:12px; }
+  h1.brand #aboutbtn { margin:0; width:auto; padding:3px 10px; font-size:12px; font-weight:600; background:transparent; color:var(--acc); border:1px solid var(--line); border-radius:12px; }
   h1.brand #aboutbtn:hover { border-color:var(--acc); }
   #about { max-width:min(460px, calc(100vw - 32px)); background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:20px 22px 16px; box-shadow:0 10px 40px rgba(0,0,0,.55); font-size:13px; line-height:1.55; }
   #about::backdrop { background:rgba(0,0,0,.6); }
@@ -240,7 +241,7 @@ try { if (JSON.parse(localStorage.getItem('stl.theme')) === 'light') document.do
 </head>
 <body>
 <aside>
-  <h1 class="brand"><img src="sat-image-bd-icon-192x192.png" alt="" width="32" height="32">SatLapseMap<button id="aboutbtn" type="button" title="What is SatLapseMap?">About</button><button id="signbtn" type="button" title="Optional: sign in with Google to keep your placemarks and settings on every device" hidden>Sign in</button><button id="installbtn" type="button" title="Install SatLapseMap as an app on this computer: its own window, Start menu and taskbar icon" hidden>Install</button></h1>
+  <h1 class="brand"><img src="sat-image-bd-icon-192x192.png" alt="" width="32" height="32">SatLapseMap<span class="hbtns"><button id="aboutbtn" type="button" title="What is SatLapseMap?">About</button><button id="signbtn" type="button" title="Optional: sign in with Google to keep your placemarks and settings on every device" hidden>Sign in</button><button id="installbtn" type="button" title="Install SatLapseMap as an app on this computer: its own window, Start menu and taskbar icon" hidden>Install</button></span></h1>
   <dialog id="acct" aria-labelledby="accthd">
     <h2 id="accthd"><img id="acctpic" alt="" hidden><span id="acctname">Sign in (optional)</span></h2>
     <div id="acctout">
